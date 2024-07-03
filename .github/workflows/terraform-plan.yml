@@ -8,19 +8,26 @@ on:
   workflow_dispatch:
 
 env:
-  TERRAFORM_VERSION: 1.4.7
+  POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+  POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+  POSTGRES_DATABASE: ${{ secrets.POSTGRES_DATABASE }}
+  POSTGRES_USERNAME: ${{ secrets.POSTGRES_USERNAME }}
+  POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+  SSL_CERT_BASE64: ${{ secrets.SSL_CERT_BASE64 }}
 
 jobs:
   setup-terraform:
     runs-on: ubuntu-latest
     steps:
+      - name: Decode SSL Cert
+        run: |
+          echo "${{ secrets.SSL_CERT_BASE64 }}" | base64 --decode > us-east-1-bundle.pem
+
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
+        uses: hashicorp/setup-terraform@v3
 
       - name: Verify Terraform installation
         run: terraform version
@@ -29,3 +36,25 @@ jobs:
         run: |
           echo "Terraform help output:"
           terraform -help
+
+      - name: Initialize Terraform
+        run: terraform init
+        working-directory: ./terraform
+
+      - name: Validate Terraform configuration
+        run: terraform validate
+        working-directory: ./terraform
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+        working-directory: ./terraform
+
+      - name: Display Terraform Plan
+        run: terraform show -json tfplan | jq '.'
+        working-directory: ./terraform
+
+      - name: Test PostgreSQL Connection
+        run: |
+          terraform apply -auto-approve
+          terraform destroy -auto-approve
+        working-directory: ./terraform
